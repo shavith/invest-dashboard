@@ -39,11 +39,12 @@ function applyResearch(company: ResearchCompany, patch: FeedPatch): ResearchComp
   return {
     ...company,
     marketCap: positive(patch.marketCapBn, company.marketCap ?? 0) || company.marketCap,
-    capSnapshot: patch.capDate || company.capSnapshot,
-    capSource: patch.source || company.capSource,
+    capSnapshot: patch.marketCapBn != null && patch.marketCapBn > 0 ? patch.capDate : company.capSnapshot,
+    capSource: patch.marketCapBn != null && patch.marketCapBn > 0 ? patch.source : company.capSource,
     revenue: positive(patch.ttmRevenueBn, company.revenue ?? 0) || company.revenue,
-    revenuePeriodEnd: patch.ttmRevenueBn != null && patch.ttmRevenueBn > 0 ? patch.capDate : company.revenuePeriodEnd,
+    revenuePeriodEnd: patch.ttmRevenueBn != null && patch.ttmRevenueBn > 0 ? patch.revenuePeriodEnd ?? "" : company.revenuePeriodEnd,
     revenueSource: patch.ttmRevenueBn != null && patch.ttmRevenueBn > 0 ? patch.source : company.revenueSource,
+    revenueComparable: patch.ttmRevenueBn != null && patch.ttmRevenueBn > 0 ? false : company.revenueComparable,
     valuation: {
       ...company.valuation,
       price: positive(patch.price, company.valuation.price ?? 0) || company.valuation.price,
@@ -57,7 +58,7 @@ function applyResearch(company: ResearchCompany, patch: FeedPatch): ResearchComp
       ...company.profit,
       roic: patch.roic == null ? company.profit.roic : patch.roic,
       operatingMargin: patch.margin == null ? company.profit.operatingMargin : patch.margin,
-      ttmEnd: patch.roic != null || patch.margin != null ? patch.capDate : company.profit.ttmEnd,
+      ttmEnd: patch.roic != null || patch.margin != null ? (patch.roic != null && patch.margin != null ? patch.profitPeriodEnd ?? "" : "") : company.profit.ttmEnd,
     },
   };
 }
@@ -70,7 +71,18 @@ export type LastPull = {
   at: string;
   provider: string;
   message: string;
+  issues?: { ticker: string; message: string }[];
 };
+
+export type RefreshState = {
+  phase: "idle" | "running" | "waiting";
+  done: number;
+  total: number;
+  message: string;
+  error: string | null;
+  issues: { ticker: string; message: string }[];
+};
+const EMPTY_REFRESH: RefreshState = { phase: "idle", done: 0, total: 0, message: "", error: null, issues: [] };
 
 type Persisted = {
   v: 1;
@@ -86,10 +98,16 @@ type Persisted = {
   apiProvider: string;
   lastPull: LastPull | null;
   listings: UsListing[];
+  autoRefresh: boolean;
+  lastAttempt: { at: string; provider: string } | null;
 };
 
 type DeskState = Persisted & {
   hydrated: boolean;
+  refresh: RefreshState;
+  setRefresh: (patch: Partial<RefreshState>) => void;
+  setAutoRefresh: (enabled: boolean) => void;
+  markAttempt: (at: string, provider: string) => void;
   setView: (view: DeskView) => void;
   setScheme: (scheme: SchemeId) => void;
   selectTicker: (ticker: string) => void;
@@ -101,6 +119,7 @@ type DeskState = Persisted & {
   addCompany: () => void;
   removeCompany: (id: string) => void;
   stageCohort: (cohort: string) => void;
+  stageListing: (ticker: string) => void;
   addRelationship: (companyId: string) => void;
   patchRelationship: (id: string, patch: Partial<Relationship>) => void;
   removeRelationship: (id: string) => void;
@@ -126,6 +145,8 @@ function fresh(): Persisted {
     apiProvider: "Not connected",
     lastPull: null,
     listings: [],
+    autoRefresh: false,
+    lastAttempt: null,
   };
 }
 
@@ -145,6 +166,8 @@ function persist(state: DeskState) {
     apiProvider: state.apiProvider,
     lastPull: state.lastPull,
     listings: state.listings,
+    autoRefresh: state.autoRefresh,
+    lastAttempt: state.lastAttempt,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(payload));
@@ -156,8 +179,13 @@ function persist(state: DeskState) {
 export const useDesk = create<DeskState>((set, get) => ({
   ...fresh(),
   hydrated: false,
+  refresh: EMPTY_REFRESH,
+  setRefresh: (patch) => set({ refresh: { ...get().refresh, ...patch } }),
+  setAutoRefresh: (autoRefresh) => { set({ autoRefresh }); persist(get()); },
+  markAttempt: (at, provider) => { set({ lastAttempt: { at, provider } }); persist(get()); },
   setView: (view) => {
     set({ view });
+    if (typeof window !== "undefined" && window.location.hash !== `#${view}`) window.location.hash = view;
     persist(get());
   },
   setScheme: (scheme) => {
@@ -215,6 +243,21 @@ export const useDesk = create<DeskState>((set, get) => ({
       view: "research",
       selectedResearchId: incoming[0]!.id,
     });
+    if (typeof window !== "undefined") window.location.hash = "research";
+    persist(get());
+  },
+  stageListing: (ticker) => {
+    const listing = get().listings.find((row) => row.ticker === ticker);
+    if (!listing) return;
+    const existing = get().companies.find((company) => company.ticker.toUpperCase() === ticker);
+    const company = existing ?? {
+      ...blankCompany(), id: `US-${ticker}`, ticker, name: listing.name,
+      sector: listing.sector === "Unclassified" ? "" : listing.sector,
+      industry: listing.industry, marketCap: listing.marketCapBn, capSnapshot: "", capSource: "",
+      valuation: { ...blankCompany().valuation, price: listing.price },
+    };
+    set({ companies: existing ? get().companies : [...get().companies, company], selectedResearchId: company.id, view: "research" });
+    if (typeof window !== "undefined") window.location.hash = "research";
     persist(get());
   },
   addRelationship: (companyId) => {
@@ -245,7 +288,8 @@ export const useDesk = create<DeskState>((set, get) => ({
     persist(get());
   },
   setApi: (patch) => {
-    set({ ...patch });
+    const changedProvider = patch.apiProvider != null && patch.apiProvider !== get().apiProvider;
+    set({ ...patch, ...(changedProvider && patch.apiKey == null ? { apiKey: "" } : {}) });
     persist(get());
   },
   applyQuotes: (patches, lastPull) => {
@@ -263,18 +307,24 @@ export const useDesk = create<DeskState>((set, get) => ({
         priceBook: patch.priceBook == null || !Number.isFinite(patch.priceBook) ? row.priceBook : patch.priceBook,
         roic: finite(patch.roic, row.roic),
         margin: finite(patch.margin, row.margin),
-        fyRevenue: positive(patch.fyRevenueBn, row.fyRevenue),
-        fyRevenue3: positive(patch.fyRevenue3Bn, row.fyRevenue3),
+        fyRevenue: patch.fyRevenueBn != null && patch.fyRevenue3Bn != null ? positive(patch.fyRevenueBn, row.fyRevenue) : row.fyRevenue,
+        fyRevenue3: patch.fyRevenueBn != null && patch.fyRevenue3Bn != null ? positive(patch.fyRevenue3Bn, row.fyRevenue3) : row.fyRevenue3,
       };
     });
     const companies = get().companies.map((company) => {
       const patch = byTicker.get(company.ticker.toUpperCase());
       return patch ? applyResearch(company, patch) : company;
     });
-    const capDate = patches.find((patch) => patch.capDate)?.capDate;
+    const capDate = [get().rules.snapshot, ...patches.filter((patch) => patch.marketCapBn != null && patch.marketCapBn > 0).map((patch) => patch.capDate)]
+      .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort().at(-1);
+    const listings = get().listings.map((row) => {
+      const patch = byTicker.get(row.ticker.toUpperCase());
+      return patch ? { ...row, marketCapBn: optionalBn(patch.marketCapBn, row.marketCapBn), price: optionalBn(patch.price, row.price) } : row;
+    });
     set({
       pilot,
       companies,
+      listings,
       rules: capDate ? { ...get().rules, snapshot: capDate } : get().rules,
       lastPull: lastPull ?? get().lastPull,
     });
@@ -295,7 +345,7 @@ export const useDesk = create<DeskState>((set, get) => ({
   },
   resetWorkbook: () => {
     const listings = get().listings;
-    set({ ...fresh(), listings, hydrated: true });
+    set({ ...fresh(), listings, refresh: EMPTY_REFRESH, hydrated: true });
     persist(get());
   },
   hydrate: () => {
@@ -316,6 +366,9 @@ export const useDesk = create<DeskState>((set, get) => ({
       }
       set({
         ...parsed,
+        autoRefresh: parsed.autoRefresh === true,
+        lastAttempt: parsed.lastAttempt ?? null,
+        rules: { ...DEFAULT_RULES, ...parsed.rules, generalWeights: { ...DEFAULT_RULES.generalWeights, ...parsed.rules?.generalWeights }, utilityWeights: { ...DEFAULT_RULES.utilityWeights, ...parsed.rules?.utilityWeights } },
         lastPull: parsed.lastPull ?? null,
         apiKey: parsed.apiKey ?? "",
         apiProvider: parsed.apiProvider || "Not connected",

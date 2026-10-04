@@ -28,6 +28,7 @@ export function UsMarket() {
   const apiKey = useDesk((state) => state.apiKey);
   const apiProvider = useDesk((state) => state.apiProvider);
   const setView = useDesk((state) => state.setView);
+  const stageListing = useDesk((state) => state.stageListing);
   const [query, setQuery] = useState("");
   const [sector, setSector] = useState("All");
   const [page, setPage] = useState(0);
@@ -145,7 +146,7 @@ export function UsMarket() {
         <p className="font-mono text-xs text-brass">Exchange directory</p>
         <h2 className="mt-1 font-serif text-3xl">US stocks</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          Imports every common stock and ADR your key can list on NYSE, Nasdaq, and NYSE American. Financial Modeling Prep also sends cap, price, sector, and industry. Finnhub and Polygon send the name and exchange only, so cap and sector stay blank instead of being guessed. Nothing here is scored. The pilot board is still the thirty-name workbook.
+          Imports every common stock and ADR your key can list on NYSE, Nasdaq, and NYSE American. Financial Modeling Prep also sends cap, price, sector, and industry. Finnhub and Polygon send the name and exchange only, so cap and sector stay blank instead of being guessed. Use Add to research to track a company and complete its inputs. Research enforces the $10B minimum; this directory is not a ranking.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -243,12 +244,13 @@ export function UsMarket() {
               <th className="px-3 py-3 font-medium">Sector</th>
               <th className="px-3 py-3 font-medium">Cap $bn</th>
               <th className="px-3 py-3 font-medium">Price</th>
+              <th className="px-3 py-3 font-medium">Research</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-muted">
+                <td colSpan={7} className="px-3 py-6 text-muted">
                   {listings.length === 0 ? "Import a directory to fill this table." : "Nothing in this sector or search."}
                 </td>
               </tr>
@@ -261,6 +263,7 @@ export function UsMarket() {
                   <td className="px-3 py-2 text-muted">{row.sector}</td>
                   <td className="px-3 py-2 font-mono">{fmtCap(row.marketCapBn)}</td>
                   <td className="px-3 py-2 font-mono">{fmtPrice(row.price)}</td>
+                  <td className="px-3 py-2"><Button variant="ghost" onClick={() => stageListing(row.ticker)}>Add to research</Button></td>
                 </tr>
               ))
             )}

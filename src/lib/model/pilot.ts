@@ -1,4 +1,4 @@
-import { averageRank, midpointPercentile, round10 } from "./percentile";
+import { averageRank, midpointPercentile, round10, weightsValid } from "./percentile";
 import type { PilotRecord, WeightSet } from "./types";
 
 export type PilotModules = {
@@ -32,6 +32,7 @@ function isUtility(record: PilotRecord): boolean {
 }
 
 function eligible(record: PilotRecord): boolean {
+  if ([record.marketCap, record.ttmRevenue, record.fyRevenue, record.fyRevenue3, record.trailingPe, record.evEbitda].some((value) => !Number.isFinite(value))) return false;
   if (!record.cohort || !(record.marketCap >= 10)) return false;
   if (!(record.ttmRevenue > 0) || !(record.fyRevenue > 0) || !(record.fyRevenue3 > 0)) return false;
   if (!(record.trailingPe > 0) || !(record.evEbitda > 0)) return false;
@@ -133,7 +134,7 @@ export function scorePilotUniverse(records: PilotRecord[], minN: number): PilotS
 
 export function aggregateScore(modules: PilotModules, weights: WeightSet): number | null {
   const parts = [modules.scale, modules.value, modules.growth, modules.profit];
-  if (parts.some((part) => part == null)) return null;
+  if (!weightsValid([weights.scale, weights.value, weights.growth, weights.profit]) || parts.some((part) => part == null || !Number.isFinite(part) || part < 0 || part > 100)) return null;
   return round10(
     weights.scale * modules.scale! +
       weights.value * modules.value! +
@@ -144,6 +145,7 @@ export function aggregateScore(modules: PilotModules, weights: WeightSet): numbe
 
 /** One weight ±delta; the other three move by ∓delta/3. Returns the score band. */
 export function sensitivityBand(modules: PilotModules, weights: WeightSet, delta: number): { low: number; high: number } | null {
+  if (!weightsValid([weights.scale, weights.value, weights.growth, weights.profit], delta)) return null;
   const base = aggregateScore(modules, weights);
   if (base == null || modules.scale == null || modules.value == null || modules.growth == null || modules.profit == null) {
     return null;

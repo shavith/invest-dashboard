@@ -33,7 +33,7 @@ export function ResearchDesk() {
         <p className="font-mono text-xs text-brass">Original equations</p>
         <h2 className="font-serif text-3xl">Research universe</h2>
         <p className="max-w-3xl text-sm leading-relaxed text-muted">
-          Same gates as the workbook. Include is off, the sector is not selected, and revenue is blank, so every issuer stays outside the approved scope. Scores appear only when a confirmed sector has at least three complete records. Missing inputs stay unranked — they are never filled with zero.
+          Add issuers from US stocks or stage a pilot cohort, then verify scope, reporting periods, forward estimates, guidance, and client/partner reviews. Scores appear when a confirmed sector has at least three comparable, complete records. Missing inputs stay unranked.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-0 flex-1 flex-col gap-1">
@@ -214,6 +214,7 @@ function IssuerEditor({
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <TextField label="Growth cohort" value={company.growth.cohort} onChange={(cohort) => onPatch({ growth: { ...company.growth, cohort } })} />
           <TextField label="EPS basis" value={company.growth.epsBasis} onChange={(epsBasis) => onPatch({ growth: { ...company.growth, epsBasis } })} />
+          <TextField label="Last annual fiscal year end" value={company.growth.lastFyEnd} onChange={(lastFyEnd) => onPatch({ growth: { ...company.growth, lastFyEnd } })} />
           <TextField label="Guide fiscal year end" value={company.growth.guideFyEnd} onChange={(guideFyEnd) => onPatch({ growth: { ...company.growth, guideFyEnd } })} />
           <Field label="Last annual EPS" value={company.growth.lastEps} onChange={(lastEps) => onPatch({ growth: { ...company.growth, lastEps } })} />
           <Field label="EPS three years earlier" value={company.growth.epsThreeYearsAgo} onChange={(epsThreeYearsAgo) => onPatch({ growth: { ...company.growth, epsThreeYearsAgo } })} />
