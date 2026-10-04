@@ -12,8 +12,6 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      VITE_AUTH_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,10 +24,14 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
+        env:
+          VITE_AUTH_ENABLED: "false"
         run: npm run build
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Start production preview
+        env:
+          VITE_AUTH_ENABLED: "false"
         run: npm run preview:restart
       - name: Desktop and mobile flows
         run: node scripts/invest-browser-check.mjs

@@ -185,6 +185,7 @@ export const useDesk = create<DeskState>((set, get) => ({
   markAttempt: (at, provider) => { set({ lastAttempt: { at, provider } }); persist(get()); },
   setView: (view) => {
     set({ view });
+    if (typeof window !== "undefined" && window.location.hash !== `#${view}`) window.location.hash = view;
     persist(get());
   },
   setScheme: (scheme) => {
@@ -242,6 +243,7 @@ export const useDesk = create<DeskState>((set, get) => ({
       view: "research",
       selectedResearchId: incoming[0]!.id,
     });
+    if (typeof window !== "undefined") window.location.hash = "research";
     persist(get());
   },
   stageListing: (ticker) => {

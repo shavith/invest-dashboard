@@ -27,6 +27,9 @@ try {
     await page.getByLabel("Provider", { exact: true }).selectOption("Polygon");
     assert.equal(await page.getByLabel("API key", { exact: true }).inputValue(), "");
     await page.getByRole("button", { name: "Clear key", exact: true }).click();
+    await page.getByRole("button", { name: "US stocks", exact: true }).click();
+    await page.locator("main").getByRole("button", { name: "Live feed", exact: true }).click();
+    assert.equal(new URL(page.url()).hash, "#feed");
     await page.getByRole("button", { name: "Rules", exact: true }).click();
     await page.getByLabel("Cap floor USD bn", { exact: true }).fill("1");
     assert.equal(await page.getByLabel("Cap floor USD bn", { exact: true }).inputValue(), "10");
