@@ -208,7 +208,7 @@ export function scoreResearch(
       row.valuationStatus === "Ranked" &&
       row.growthStatus === "Ready" &&
       row.profitStatus === "Ready" &&
-      (row.networkStatus === "Ranked" || row.networkStatus === "Reviewed: no qualifying ties") &&
+      (rules.networkBlend === 0 || row.networkStatus === "Ranked" || row.networkStatus === "Reviewed: no qualifying ties") &&
       Number.isFinite(cohortN) &&
       cohortN >= minN;
 
@@ -379,15 +379,15 @@ function valuationFor(
   }
   const inputs = company.valuation;
   const cap = company.marketCap!;
-  const pe = num(inputs.price) && num(inputs.ntmEps) && inputs.ntmEps > 0 ? inputs.price / inputs.ntmEps : null;
+  const pe = num(inputs.price) && inputs.price > 0 && num(inputs.ntmEps) && inputs.ntmEps > 0 ? inputs.price / inputs.ntmEps : null;
   const parts = [inputs.debt, inputs.cash, inputs.preferred, inputs.nci, inputs.nonoperatingInvestments];
   const ev =
-    parts.every(num) && num(inputs.ntmEbitda)
+    parts.every((part) => num(part) && part >= 0) && num(inputs.ntmEbitda)
       ? cap + inputs.debt! + inputs.preferred! + inputs.nci! - inputs.cash! - inputs.nonoperatingInvestments!
       : null;
   const evMultiple = ev != null && num(inputs.ntmEbitda) && ev > 0 && inputs.ntmEbitda > 0 ? ev / inputs.ntmEbitda : null;
   const fcf =
-    num(inputs.ttmCfo) && num(inputs.ttmCapex) && cap > 0 ? (inputs.ttmCfo - inputs.ttmCapex) / cap : null;
+    num(inputs.ttmCfo) && num(inputs.ttmCapex) && inputs.ttmCapex >= 0 && cap > 0 ? (inputs.ttmCfo - inputs.ttmCapex) / cap : null;
   const book = num(inputs.bookEquity) && inputs.bookEquity > 0 ? cap / inputs.bookEquity : null;
   const required = [
     [weights.pe, pe],
@@ -436,13 +436,13 @@ function valuationFor(
 function metricBundle(company: ResearchCompany, weights: Rules["generalWeights"]) {
   const cap = company.marketCap ?? 0;
   const inputs = company.valuation;
-  const pe = num(inputs.price) && num(inputs.ntmEps) && inputs.ntmEps > 0 ? inputs.price / inputs.ntmEps : null;
+  const pe = num(inputs.price) && inputs.price > 0 && num(inputs.ntmEps) && inputs.ntmEps > 0 ? inputs.price / inputs.ntmEps : null;
   const parts = [inputs.debt, inputs.cash, inputs.preferred, inputs.nci, inputs.nonoperatingInvestments];
-  const evBase = parts.every(num)
+  const evBase = parts.every((part) => num(part) && part >= 0)
     ? cap + inputs.debt! + inputs.preferred! + inputs.nci! - inputs.cash! - inputs.nonoperatingInvestments!
     : null;
   const ev = evBase != null && num(inputs.ntmEbitda) && evBase > 0 && inputs.ntmEbitda > 0 ? evBase / inputs.ntmEbitda : null;
-  const fcf = num(inputs.ttmCfo) && num(inputs.ttmCapex) && cap > 0 ? (inputs.ttmCfo - inputs.ttmCapex) / cap : null;
+  const fcf = num(inputs.ttmCfo) && num(inputs.ttmCapex) && inputs.ttmCapex >= 0 && cap > 0 ? (inputs.ttmCfo - inputs.ttmCapex) / cap : null;
   const pb = num(inputs.bookEquity) && inputs.bookEquity > 0 ? cap / inputs.bookEquity : null;
   const complete = [
     [weights.pe, pe],
@@ -466,29 +466,30 @@ function growthFor(
   if (!capEligible[index]) return empty;
   if (!weightsOk) return { ...empty, growthStatus: "Check weights" };
   const growth = company.growth;
+  if (rules.guidanceWeight > 0 && !growthDatesValid(company, rules.snapshot)) return { ...empty, growthStatus: "Check fiscal years/guidance dates" };
   const cagr =
     num(growth.lastEps) && num(growth.epsThreeYearsAgo) && growth.lastEps > 0 && growth.epsThreeYearsAgo > 0
       ? Math.pow(growth.lastEps / growth.epsThreeYearsAgo, 1 / 3) - 1
       : null;
-  const guideMid = num(growth.guideLow) && num(growth.guideHigh) ? (growth.guideLow + growth.guideHigh) / 2 : null;
+  const guideMid = num(growth.guideLow) && num(growth.guideHigh) && growth.guideLow <= growth.guideHigh ? (growth.guideLow + growth.guideHigh) / 2 : null;
   const guide = guideMid != null && num(growth.lastEps) && growth.lastEps > 0 ? guideMid / growth.lastEps - 1 : null;
-  if (!growth.sameBasisReviewed || cagr == null || guide == null || !growth.cohort) {
+  if (!growth.sameBasisReviewed || (rules.cagrWeight > 0 && cagr == null) || (rules.guidanceWeight > 0 && guide == null) || !growth.cohort) {
     return { epsCagr: cagr, guideGrowth: guide, growth: null, growthStatus: "Growth inputs incomplete" };
   }
   if (!rules.universeConfirmed || rules.sector === "Not selected") {
     return { epsCagr: cagr, guideGrowth: guide, growth: null, growthStatus: "Confirm issuer universe" };
   }
   const peers = companies.filter((other, otherIndex) => {
-    if (!capEligible[otherIndex] || !other.growth.sameBasisReviewed) return false;
+    if (!capEligible[otherIndex] || !other.growth.sameBasisReviewed || (rules.guidanceWeight > 0 && !growthDatesValid(other, rules.snapshot))) return false;
     if (other.growth.cohort !== growth.cohort || other.growth.accounting !== growth.accounting || other.growth.epsBasis !== growth.epsBasis) {
       return false;
     }
     const gap = daysBetween(other.growth.guideFyEnd, growth.guideFyEnd);
-    return gap != null && Math.abs(gap) <= 45 && rate(other) != null && guided(other) != null;
+    return (rules.guidanceWeight === 0 || (gap != null && Math.abs(gap) <= 45 && guided(other) != null)) && (rules.cagrWeight === 0 || rate(other) != null);
   });
   if (peers.length < minN) return { epsCagr: cagr, guideGrowth: guide, growth: null, growthStatus: "Too few comparable growth records" };
-  const cagrScore = midpointPercentile(cagr, peers.map((peer) => rate(peer)!), true, minN);
-  const guideScore = midpointPercentile(guide, peers.map((peer) => guided(peer)!), true, minN);
+  const cagrScore = rules.cagrWeight === 0 ? 0 : midpointPercentile(cagr!, peers.map((peer) => rate(peer)!), true, minN);
+  const guideScore = rules.guidanceWeight === 0 ? 0 : midpointPercentile(guide!, peers.map((peer) => guided(peer)!), true, minN);
   if (cagrScore == null || guideScore == null) {
     return { epsCagr: cagr, guideGrowth: guide, growth: null, growthStatus: "Too few comparable growth records" };
   }
@@ -500,6 +501,15 @@ function growthFor(
   };
 }
 
+function growthDatesValid(company: ResearchCompany, snapshot: string): boolean {
+  const lastAge = daysBetween(snapshot, company.growth.lastFyEnd);
+  const guideAge = daysBetween(snapshot, company.growth.guideFyEnd);
+  const yearGap = daysBetween(company.growth.guideFyEnd, company.growth.lastFyEnd);
+  return lastAge != null && lastAge >= 0 && lastAge <= 550 &&
+    guideAge != null && guideAge <= 0 && guideAge >= -550 &&
+    yearGap != null && yearGap >= 300 && yearGap <= 400;
+}
+
 function rate(company: ResearchCompany): number | null {
   const growth = company.growth;
   if (!num(growth.lastEps) || !num(growth.epsThreeYearsAgo) || growth.lastEps <= 0 || growth.epsThreeYearsAgo <= 0) return null;
@@ -508,7 +518,7 @@ function rate(company: ResearchCompany): number | null {
 
 function guided(company: ResearchCompany): number | null {
   const growth = company.growth;
-  if (!num(growth.guideLow) || !num(growth.guideHigh) || !num(growth.lastEps) || growth.lastEps <= 0) return null;
+  if (!num(growth.guideLow) || !num(growth.guideHigh) || growth.guideLow > growth.guideHigh || !num(growth.lastEps) || growth.lastEps <= 0) return null;
   return (growth.guideLow + growth.guideHigh) / 2 / growth.lastEps - 1;
 }
 

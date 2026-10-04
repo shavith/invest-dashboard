@@ -67,12 +67,14 @@ export function TextField({
   type = "text",
   autoComplete = "off",
   onKeyDown,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (next: string) => void;
   type?: "text" | "password";
   autoComplete?: string;
+  disabled?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
   return (
@@ -81,6 +83,7 @@ export function TextField({
       <input
         type={type}
         autoComplete={autoComplete}
+        disabled={disabled}
         spellCheck={false}
         value={value}
         onKeyDown={onKeyDown}

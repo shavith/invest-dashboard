@@ -9,6 +9,7 @@ export function midpointPercentile(
   higherIsBetter: boolean,
   minN: number,
 ): number | null {
+  if (!Number.isFinite(value) || !Number.isFinite(minN) || peers.some((peer) => !Number.isFinite(peer)) || !peers.includes(value)) return null;
   const n = peers.length;
   if (n < Math.max(2, minN)) return null;
   let min = peers[0]!;
@@ -42,14 +43,19 @@ export function weightsValid(weights: number[], sensitivity = 0): boolean {
   }
   const sum = weights.reduce((total, weight) => total + weight, 0);
   if (Math.abs(sum - 1) > 0.000001) return false;
-  if (sensitivity < 0) return false;
+  if (!Number.isFinite(sensitivity) || sensitivity < 0) return false;
   const min = Math.min(...weights);
   return sensitivity <= min + 1e-9;
 }
 
 export function daysBetween(laterIso: string, earlierIso: string): number | null {
-  const later = Date.parse(laterIso);
-  const earlier = Date.parse(earlierIso);
+  const parseDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
+    const date = Date.parse(value);
+    return Number.isFinite(date) && new Date(date).toISOString().slice(0, 10) === value ? date : NaN;
+  };
+  const later = parseDate(laterIso);
+  const earlier = parseDate(earlierIso);
   if (!Number.isFinite(later) || !Number.isFinite(earlier)) return null;
   return Math.round((later - earlier) / 86_400_000);
 }

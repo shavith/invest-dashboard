@@ -73,6 +73,14 @@ export function RulesView() {
         ]}
       />
       <WeightGroup
+        title="Growth and guidance"
+        ok={weightsValid([rules.cagrWeight, rules.guidanceWeight])}
+        rows={[
+          ["Historical EPS CAGR", rules.cagrWeight, (cagrWeight) => patchRules({ cagrWeight })],
+          ["Company guidance", rules.guidanceWeight, (guidanceWeight) => patchRules({ guidanceWeight })],
+        ]}
+      />
+      <WeightGroup
         title="Overall score"
         ok={overallOk}
         rows={[

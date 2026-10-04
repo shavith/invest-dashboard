@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { cancelRefresh, refreshDesk } from "@/lib/model/refresh";
+import { dailyRefreshDue } from "@/lib/model/refresh-policy";
 import { FeedView } from "@/components/feed-view";
 import { PilotBoard } from "@/components/pilot-board";
 import { ReferenceView } from "@/components/reference-view";
@@ -27,7 +29,23 @@ export function InvestApp() {
 
   useEffect(() => {
     hydrate();
-  }, [hydrate]);
+    const readHash = () => {
+      const section = window.location.hash.slice(1);
+      const match = NAV.find((item) => item.id === section);
+      if (match) setView(match.id);
+    };
+    readHash();
+    window.addEventListener("hashchange", readHash);
+    const checkDaily = () => {
+      const state = useDesk.getState();
+      if (document.visibilityState === "visible" && state.hydrated && state.refresh.phase === "idle" &&
+        dailyRefreshDue(state.autoRefresh, state.apiKey, state.apiProvider, state.lastAttempt)) void refreshDesk();
+    };
+    checkDaily();
+    const timer = window.setInterval(checkDaily, 60_000);
+    document.addEventListener("visibilitychange", checkDaily);
+    return () => { window.clearInterval(timer); window.removeEventListener("hashchange", readHash); document.removeEventListener("visibilitychange", checkDaily); };
+  }, [hydrate, setView]);
 
   return (
     <div className="min-h-screen bg-bg text-fg">
@@ -40,18 +58,18 @@ export function InvestApp() {
             </div>
             <div className="text-sm">
               <p className="text-faint">{lastPull ? liveLabel(lastPull.at) : "Snapshot 3 Oct 2026"}</p>
-              <p className="text-muted">{apiProvider === "Not connected" ? "Manual inputs" : lastPull ? `${apiProvider} · live` : apiProvider}</p>
+              <p className="text-muted">{apiProvider === "Not connected" ? "Manual inputs" : lastPull ? `${lastPull.provider} · refreshed` : apiProvider}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <nav className="flex flex-wrap gap-2" aria-label="Sections">
               {NAV.map((item) => (
-                <Button key={item.id} variant={view === item.id ? "primary" : "ghost"} onClick={() => setView(item.id)}>
+                <Button key={item.id} variant={view === item.id ? "primary" : "ghost"} onClick={() => { setView(item.id); window.location.hash = item.id; }}>
                   {item.label}
                 </Button>
               ))}
             </nav>
-            <Button variant="ghost" className="shrink-0" onClick={resetWorkbook}>
+            <Button variant="ghost" className="shrink-0" onClick={() => { cancelRefresh(); resetWorkbook(); }}>
               Reset
             </Button>
           </div>
@@ -71,6 +89,6 @@ export function InvestApp() {
 
 function liveLabel(iso: string): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Live snapshot";
-  return `Live ${date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`;
+  if (Number.isNaN(date.getTime())) return "Refresh recorded";
+  return `Refreshed ${date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`;
 }
