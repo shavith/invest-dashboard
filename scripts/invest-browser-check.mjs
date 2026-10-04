@@ -50,7 +50,11 @@ try {
     await page.getByRole("button", { name: "Add to research", exact: true }).click();
     await page.getByRole("heading", { name: "Research universe", exact: true }).waitFor();
     assert.ok((await page.locator("main").innerText()).includes("Fixture Industries"));
-    await page.getByLabel("Last annual fiscal year end", { exact: true }).waitFor();
+    await page.locator("summary").filter({ hasText: "Growth inputs" }).click();
+    await page.getByLabel("Last annual fiscal year end", { exact: true }).fill("2025-12-31");
+    await page.reload();
+    assert.equal(await page.getByLabel("Last annual fiscal year end", { exact: true }).inputValue(), "2025-12-31");
+    await page.locator("summary").filter({ hasText: "Growth inputs" }).click();
     await page.screenshot({ path: out + "/research-" + viewport.width + ".png", fullPage: true });
     for (const label of ["Pilot board", "Rules", "Equations", "Live feed", "US stocks"]) {
       await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: label, exact: true }).click();
