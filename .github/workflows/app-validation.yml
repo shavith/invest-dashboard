@@ -25,6 +25,10 @@ jobs:
         run: npm run typecheck
       - name: Production build
         env:
+          VITE_AUTH_ENABLED: "true"
+        run: npm run build
+      - name: Build browser test preview
+        env:
           VITE_AUTH_ENABLED: "false"
         run: npm run build
       - name: Install browser
