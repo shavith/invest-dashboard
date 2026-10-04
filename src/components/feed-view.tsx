@@ -31,7 +31,7 @@ export function FeedView() {
       </div>
       <label className="flex flex-col gap-1">
         <span className="text-xs text-muted">Provider</span>
-        <select disabled={busy} value={apiProvider} onChange={(event) => setApi({ apiProvider: event.target.value })}
+        <select aria-label="Provider" disabled={busy} value={apiProvider} onChange={(event) => setApi({ apiProvider: event.target.value })}
           className="h-11 w-full min-w-0 rounded-md border border-line bg-ink px-3 text-sm">
           {PROVIDERS.map((name) => <option key={name}>{name}</option>)}
         </select>
@@ -40,7 +40,7 @@ export function FeedView() {
         onChange={(next) => setApi({ apiKey: next })} />
       <label className="flex flex-col gap-1">
         <span className="text-xs text-muted">Company to test</span>
-        <select disabled={busy} value={testTicker} onChange={(event) => setTestTicker(event.target.value)}
+        <select aria-label="Company to test" disabled={busy} value={testTicker} onChange={(event) => setTestTicker(event.target.value)}
           className="h-11 w-full min-w-0 rounded-md border border-line bg-ink px-3 text-sm">
           {tickers.map((ticker) => <option key={ticker}>{ticker}</option>)}
         </select>

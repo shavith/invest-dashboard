@@ -6,10 +6,12 @@ const base = process.env.APP_BASE_URL || "http://127.0.0.1:8081";
 const out = "artifacts/browser";
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ headless: true });
+let activePage;
 try {
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport });
     const page = await context.newPage();
+    activePage = page;
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(base + "/#feed");
@@ -60,4 +62,10 @@ try {
     console.log("PASS: feed validation, persistence, provider switch, rules, directory staging, navigation and layout at " + viewport.width + "px");
     await context.close();
   }
+} catch (error) {
+  if (activePage && !activePage.isClosed()) {
+    await activePage.screenshot({ path: out + "/failure.png", fullPage: true });
+    console.error("BROWSER_STATE=" + JSON.stringify({ url: activePage.url(), text: await activePage.locator("body").innerText() }));
+  }
+  throw error;
 } finally { await browser.close(); }
