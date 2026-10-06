@@ -1,0 +1,35 @@
+name: Sites build checks
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "server/**"
+      - "scripts/**"
+      - "migrations/**"
+      - "public/**"
+      - "package*.json"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - ".github/workflows/sites-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:sites
